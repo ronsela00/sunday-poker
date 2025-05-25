@@ -4,15 +4,15 @@ import os
 from datetime import datetime
 import pytz
 
-# הגדרות
+# ===== הגדרות =====
 MAX_PLAYERS = 8
 DATA_FILE = "players.json"
 ALL_PLAYERS_FILE = "all_players.json"
 LAST_RESET_FILE = "last_reset.txt"
 ISRAEL_TZ = pytz.timezone("Asia/Jerusalem")
-ADMIN_CODE = "secretadmin"
+ADMIN_CODE = "secretadmin"  # שנה לקוד שלך
 
-# פונקציות קבצים
+# ===== פונקציות עזר =====
 def load_json(file_path):
     if not os.path.exists(file_path):
         return []
@@ -23,7 +23,12 @@ def save_json(file_path, data):
     with open(file_path, "w") as f:
         json.dump(data, f)
 
-# הרשאה לפי זמן
+def get_player(name, players):
+    for p in players:
+        if p["name"] == name:
+            return p
+    return None
+
 def is_registration_open(now):
     day = now.weekday()
     hour = now.hour
@@ -65,13 +70,7 @@ def auto_register_missing_players(all_players, registered_players):
 
     save_json(DATA_FILE, registered_players)
 
-def get_player(name, players):
-    for p in players:
-        if p["name"] == name:
-            return p
-    return None
-
-# התחלה
+# ===== התחלה =====
 now = datetime.now(ISRAEL_TZ)
 all_players = load_json(ALL_PLAYERS_FILE)
 players = load_json(DATA_FILE)
@@ -81,24 +80,26 @@ if is_new_registration_period(now):
     players = []
     auto_register_missing_players(all_players, players)
 
-# טייטל
+# ===== ממשק ראשי =====
 st.title("הרשמה למשחק פוקר")
 
-# הצגת נרשמים
-st.subheader("🎯 שחקנים רשומים כרגע:")
+st.subheader("🌟 שחקנים רשומים כרגע:")
 if players:
     for i, p in enumerate(players, start=1):
         st.write(f"{i}. {p['name']}")
 else:
     st.info("אין נרשמים עדיין.")
 
-# טופס
 st.markdown("---")
-st.header("📥 טופס פעולה")
+st.header("📊 טופס פעולה")
 
 name = st.text_input("שם משתמש")
 code = st.text_input("קוד אישי או קוד אדמין", type="password")
 action = st.radio("בחר פעולה", ["להירשם למשחק", "להסיר את עצמי", "🛠️ אדמין - איפוס קוד"])
+new_code = None
+
+if action == "🛠️ אדמין - איפוס קוד" and code == ADMIN_CODE:
+    new_code = st.text_input("🔐 קוד חדש לשחקן", type="password")
 
 if st.button("שלח"):
     if not name.strip() or not code.strip():
@@ -134,19 +135,17 @@ if st.button("שלח"):
         elif action == "🛠️ אדמין - איפוס קוד":
             if code != ADMIN_CODE:
                 st.error("קוד אדמין שגוי.")
+            elif not new_code:
+                st.warning("הכנס קוד חדש.")
             else:
-                st.success("אימות הצליח ✅")
-                new_code = st.text_input("🔐 קוד חדש לשחקן", type="password", key="admin_new_code")
-
-                if st.button("💾 שמור קוד חדש"):
-                    target = get_player(name, all_players)
-                    if not target:
-                        st.error("המשתמש לא נמצא ברשימה הקבועה.")
-                    else:
-                        target["code"] = new_code
-                        save_json(ALL_PLAYERS_FILE, all_players)
-                        for p in players:
-                            if p["name"] == name:
-                                p["code"] = new_code
-                        save_json(DATA_FILE, players)
-                        st.success(f"הקוד של '{name}' עודכן בהצלחה ✅")
+                target = get_player(name, all_players)
+                if not target:
+                    st.error("המשתמש לא נמצא ברשימה.")
+                else:
+                    target["code"] = new_code
+                    save_json(ALL_PLAYERS_FILE, all_players)
+                    for p in players:
+                        if p["name"] == name:
+                            p["code"] = new_code
+                    save_json(DATA_FILE, players)
+                    st.success(f"הקוד של '{name}' עודכן בהצלחה ✅")
