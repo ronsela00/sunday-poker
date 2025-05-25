@@ -135,11 +135,13 @@ if st.button("שלח"):
             if code != ADMIN_CODE:
                 st.error("קוד אדמין שגוי.")
             else:
-                new_code = st.text_input("הזן קוד חדש לשחקן", type="password")
-                if st.button("אפס סיסמה"):
+                st.success("אימות הצליח ✅")
+                new_code = st.text_input("🔐 קוד חדש לשחקן", type="password", key="admin_new_code")
+
+                if st.button("💾 שמור קוד חדש"):
                     target = get_player(name, all_players)
                     if not target:
-                        st.error("המשתמש לא נמצא.")
+                        st.error("המשתמש לא נמצא ברשימה הקבועה.")
                     else:
                         target["code"] = new_code
                         save_json(ALL_PLAYERS_FILE, all_players)
@@ -147,4 +149,4 @@ if st.button("שלח"):
                             if p["name"] == name:
                                 p["code"] = new_code
                         save_json(DATA_FILE, players)
-                        st.success(f"הקוד של '{name}' אופס בהצלחה.")
+                        st.success(f"הקוד של '{name}' עודכן בהצלחה ✅")
