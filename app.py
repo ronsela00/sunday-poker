@@ -7,84 +7,83 @@ import pytz
 # הגדרות
 MAX_PLAYERS = 8
 DATA_FILE = "players.json"
+ALL_PLAYERS_FILE = "all_players.json"
 ISRAEL_TZ = pytz.timezone("Asia/Jerusalem")
+ADMIN_CODE = "secretadmin"  # שנה לקוד שלך
 
-# פונקציות עזר
+# טעינת ושמירת רשימת שחקנים
 def load_players():
     if not os.path.exists(DATA_FILE):
         return []
-    with open(DATA_FILE, "r") as f:
+    with open(file, "r") as f:
         return json.load(f)
 
-def save_players(players):
-    with open(DATA_FILE, "w") as f:
-        json.dump(players, f)
+def save_json(file, data):
+    with open(file, "w") as f:
+        json.dump(data, f)
 
-def clear_players():
-    if os.path.exists(DATA_FILE):
-        os.remove(DATA_FILE)
-
-def is_registration_open(now):
-    day = now.weekday()  # 0=שני, 4=שישי, 6=ראשון
+def is_registration_open():
+    now = datetime.now(ISRAEL_TZ)
+    day = now.weekday()  # 0=שני ... 4=שישי ... 6=ראשון
     hour = now.hour
+    minute = now.minute
 
-    if day == 4 and hour >= 14:  # שישי מ-14:00
+    # נפתח ביום שישי מ־14:00
+    if day == 4 and (hour >= 14):
         return True
-    if day in [5, 6]:  # שבת וראשון
+    # פתוח בשבת (שבת = 5)
+    if day == 5:
         return True
-    if day == 0 and hour < 1:  # שני עד 01:00
+    # פתוח בראשון (יום ראשון = 6)
+    if day == 6:
         return True
+    # סגור ביום שני אחרי 1 בלילה
+    if day == 0 and hour < 1:
+        return True
+
     return False
 
-def should_clear_list(now):
-    return now.weekday() == 1 and now.hour >= 20  # שלישי מ-20:00
-
-# קוד ראשי
-now = datetime.now(ISRAEL_TZ)
+# קוד עיקרי
 players = load_players()
-
-# איפוס רשימה בשלישי בערב
-if should_clear_list(now):
-    clear_players()
-    players = []
-
 st.title("הרשמה למשחק פוקר")
 
-# תצוגת הרשימה תמיד עד שלישי בערב
+# תצוגת רשימת נרשמים תמיד
 st.subheader("🎯 שחקנים רשומים כרגע:")
 if players:
     for i, p in enumerate(players, start=1):
-        st.write(f"{i}. {p}")
+        st.write(f"{i}. {p['name']}")
 else:
-    st.info("אין כרגע נרשמים.")
+    st.info("עדיין אין נרשמים.")
 
-# הצגת טופס רק בזמני הרשמה
-if is_registration_open(now):
+# בדיקה אם ההרשמה פתוחה
+if is_registration_open():
     st.markdown("✅ ההרשמה פתוחה כעת!")
 
-    username = st.text_input("שם משתמש")
+    email = st.text_input("הכנס כתובת אימייל שלך")
     action = st.radio("בחר פעולה", ["להירשם למשחק", "להסיר את עצמי"])
 
     if st.button("שלח"):
-        if not username.strip():
-            st.warning("יש להזין שם שחקן.")
+        if not email:
+            st.warning("יש להזין כתובת אימייל.")
         else:
             if action == "להירשם למשחק":
-                if username in players:
+                if email in players:
                     st.info("כבר נרשמת.")
                 elif len(players) >= MAX_PLAYERS:
                     st.error("המשחק מלא! (8 שחקנים)")
                 else:
-                    players.append(username)
+                    players.append(email)
                     save_players(players)
                     st.success("נרשמת בהצלחה!")
 
             elif action == "להסיר את עצמי":
-                if username in players:
-                    players.remove(username)
+                if email in players:
+                    players.remove(email)
                     save_players(players)
                     st.success("הוסרת מהרשימה.")
                 else:
                     st.info("לא נמצאת ברשימת הנרשמים.")
+
 else:
     st.warning("🕐 ההרשמה סגורה. ניתן להירשם מיום שישי ב־14:00 עד יום שני ב־01:00.")
+
