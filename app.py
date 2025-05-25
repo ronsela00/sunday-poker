@@ -67,7 +67,7 @@ if is_registration_open(now):
 
     if st.button("שלח"):
         if not username.strip():
-            st.warning("יש להזין שם משתמש.")
+            st.warning("יש להזין שם שחקן.")
         else:
             if action == "להירשם למשחק":
                 if username in players:
