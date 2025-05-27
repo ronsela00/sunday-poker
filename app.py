@@ -82,7 +82,7 @@ elif len(players) == 7:
     st.info("⏳ תמהר כי נשאר מקום אחרון!")
 
 # ===== הצגת שחקנים רשומים =====
-st.subheader("\U0001F1F3\U0001F1F1 שחקנים רשומים:")
+st.subheader("♠️♥️ רשימת השחקנים לשולחן ♣️♦️")
 if players:
     for i, p in enumerate(players, start=1):
         st.write(f"{i}. {p['name']}")
