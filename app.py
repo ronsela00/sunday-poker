@@ -6,11 +6,10 @@ import pytz
 
 # ===== הגדרות =====
 MAX_PLAYERS = 8
+MIN_PLAYERS = 6
 DATA_FILE = "players.json"
-ALL_PLAYERS_FILE = "all_players.json"
 LAST_RESET_FILE = "last_reset.txt"
 ISRAEL_TZ = pytz.timezone("Asia/Jerusalem")
-ADMIN_CODE = "secretadmin"  # שנה לקוד שלך
 
 # ===== פונקציות עזר =====
 def load_json(file_path):
@@ -59,17 +58,6 @@ def is_new_registration_period(now):
 def reset_registration():
     save_json(DATA_FILE, [])
 
-def auto_register_missing_players(all_players, registered_players):
-    current_names = [p["name"] for p in registered_players]
-    missing = [p for p in all_players if p["name"] not in current_names]
-
-    for p in missing:
-        if len(registered_players) >= MAX_PLAYERS:
-            break
-        registered_players.append(p)
-
-    save_json(DATA_FILE, registered_players)
-
 # ===== התחלה =====
 now = datetime.now(ISRAEL_TZ)
 all_players = json.loads(st.secrets["players"])
@@ -78,25 +66,36 @@ players = load_json(DATA_FILE)
 if is_new_registration_period(now):
     reset_registration()
     players = []
-    auto_register_missing_players(all_players, players)
+    # לא מוסיפים שחקנים אוטומטית! רק מי שנרשם בפועל ייכנס
+    save_json(DATA_FILE, players)
 
 # ===== ממשק ראשי =====
 st.title("הרשמה למשחק פוקר")
 
-st.subheader("🌟 שחקנים רשומים כרגע:")
+# ===== הצגת חיווי על מצב המשחק =====
+st.subheader("\U0001F4FA מצב נוכחי:")
+if len(players) < MIN_PLAYERS:
+    st.warning("⚠️ אין מספיק שחקנים עדיין. אין משחק כרגע.")
+elif len(players) == 5:
+    st.info("🚀 יאללה, אתה האחרון לסגור לנו את הפינה!")
+elif len(players) == 7:
+    st.info("⏳ תמהר כי נשאר מקום אחרון!")
+
+# ===== הצגת שחקנים רשומים =====
+st.subheader("\U0001F1F3\U0001F1F1 שחקנים רשומים:")
 if players:
     for i, p in enumerate(players, start=1):
         st.write(f"{i}. {p['name']}")
 else:
     st.info("אין נרשמים עדיין.")
 
+# ===== טופס פעולה =====
 st.markdown("---")
-st.header("📊 טופס פעולה")
+st.header("\U0001F4CA טופס פעולה")
 
 name = st.text_input("שם משתמש")
 code = st.text_input("קוד אישי", type="password")
 action = st.radio("בחר פעולה", ["להירשם למשחק", "להסיר את עצמי"])
-new_code = None
 
 if st.button("שלח"):
     if not name.strip() or not code.strip():
