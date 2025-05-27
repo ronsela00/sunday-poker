@@ -72,7 +72,7 @@ def auto_register_missing_players(all_players, registered_players):
 
 # ===== התחלה =====
 now = datetime.now(ISRAEL_TZ)
-all_players = load_json(ALL_PLAYERS_FILE)
+all_players = json.loads(st.secrets["players"])
 players = load_json(DATA_FILE)
 
 if is_new_registration_period(now):
@@ -94,12 +94,9 @@ st.markdown("---")
 st.header("📊 טופס פעולה")
 
 name = st.text_input("שם משתמש")
-code = st.text_input("קוד אישי או קוד אדמין", type="password")
-action = st.radio("בחר פעולה", ["להירשם למשחק", "להסיר את עצמי", "🛠️ אדמין - איפוס קוד"])
+code = st.text_input("קוד אישי", type="password")
+action = st.radio("בחר פעולה", ["להירשם למשחק", "להסיר את עצמי"])
 new_code = None
-
-if action == "🛠️ אדמין - איפוס קוד" and code == ADMIN_CODE:
-    new_code = st.text_input("🔐 קוד חדש לשחקן", type="password")
 
 if st.button("שלח"):
     if not name.strip() or not code.strip():
@@ -131,21 +128,3 @@ if st.button("שלח"):
                 st.success("הוסרת מהרשימה.")
             else:
                 st.error("שם או קוד שגויים.")
-
-        elif action == "🛠️ אדמין - איפוס קוד":
-            if code != ADMIN_CODE:
-                st.error("קוד אדמין שגוי.")
-            elif not new_code:
-                st.warning("הכנס קוד חדש.")
-            else:
-                target = get_player(name, all_players)
-                if not target:
-                    st.error("המשתמש לא נמצא ברשימה.")
-                else:
-                    target["code"] = new_code
-                    save_json(ALL_PLAYERS_FILE, all_players)
-                    for p in players:
-                        if p["name"] == name:
-                            p["code"] = new_code
-                    save_json(DATA_FILE, players)
-                    st.success(f"הקוד של '{name}' עודכן בהצלחה ✅")
