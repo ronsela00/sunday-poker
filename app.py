@@ -1,5 +1,4 @@
 import streamlit as st
-import sqlite3
 from datetime import datetime, timedelta
 import pytz
 import os
@@ -26,6 +25,9 @@ MIN_PLAYERS = 5
 ISRAEL_TZ = pytz.timezone("Asia/Jerusalem")
 
 # ===== פונקציות Google Sheets =====
+def log_reset_time(now):
+    sheets = get_sheets()
+    sheets["reset"].append_row([now.strftime("%Y-%m-%d %H:%M")])
 def get_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["GOOGLE_SHEETS_CREDENTIALS"]), scope)
@@ -33,7 +35,8 @@ def get_sheets():
     sheet = client.open("Poker Players")
     return {
         "current": sheet.worksheet("Current"),
-        "last": sheet.worksheet("Last")
+        "last": sheet.worksheet("Last"),
+        "reset": sheet.worksheet("ResetLog")
     }
 
 def sync_players_to_sheet(players, sheet_name):
@@ -45,56 +48,6 @@ def sync_players_to_sheet(players, sheet_name):
         sheet.append_row([name, ts])
 
 
-# ===== פונקציות מסד נתונים =====
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS registered (
-            name TEXT PRIMARY KEY,
-            timestamp TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def register_player(name):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    try:
-        now_dt = datetime.now(ISRAEL_TZ)
-        timestamp = f"{weekday_hebrew[now_dt.strftime('%A')]} {now_dt.strftime('%H:%M')}"
-        c.execute("INSERT INTO registered (name, timestamp) VALUES (?, ?)", (name, timestamp))
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-    finally:
-        conn.close()
-
-def unregister_player(name):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("DELETE FROM registered WHERE name = ?", (name,))
-    conn.commit()
-    conn.close()
-
-def get_registered_players():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT name, timestamp FROM registered")
-    players = c.fetchall()
-    conn.close()
-    return players
-
-def reset_registered():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("DELETE FROM registered")
-    conn.commit()
-    conn.close()
-
-# ===== ניהול תיעוד שחקנים =====
 def save_last_players(players):
     sync_players_to_sheet(players, "last")
     with open(LAST_PLAYERS_FILE, "w") as f:
@@ -155,23 +108,20 @@ def is_new_registration_period(now):
     return False
 
 # ===== התחלה =====
-init_db()
 now = datetime.now(ISRAEL_TZ)
 all_players = get_allowed_players()
-players = get_registered_players()
+players = []  # יתעדכן מתוך Google Sheets
 registration_open = is_registration_open(now)
 
 if is_new_registration_period(now):
+    log_reset_time(now)
     save_last_players(players)
     reset_registered()
     players = []
     priority_players = get_priority_players(all_players, load_last_players())
     for p_name in priority_players:
         if len(players) < MAX_PLAYERS:
-            if register_player(p_name):
-                now_dt = datetime.now(ISRAEL_TZ)
-                hebrew_ts = f"{weekday_hebrew[now_dt.strftime('%A')]} {now_dt.strftime('%H:%M')}"
-                players.append((p_name, hebrew_ts))
+            players.append((p_name, hebrew_ts))
 
 # ===== ממשק =====
 st.title("\U0001F0CF\U0001F4B0 טורניר הפוקר השבועי")
@@ -218,7 +168,7 @@ if st.button("שלח"):
         st.warning("יש להזין שם וקוד.")
     else:
         allowed_player = get_player(name, all_players)
-        is_registered = name in [p[0] for p in players]
+        is_registered = any(name == p[0] for p in players)
 
         if action == "להירשם למשחק":
             if not registration_open:
@@ -246,5 +196,5 @@ if st.button("שלח"):
             elif not is_registered:
                 st.info("אתה לא רשום כרגע.")
             else:
-                unregister_player(name)
+                # מחיקת שחקן תיעשה רק בגיליון בעתיד (לא כרגע)
                 st.success("הוסרת מהרשימה.")
