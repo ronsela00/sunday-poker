@@ -6,6 +6,9 @@ import os
 import json
 
 # ===== הגדרות =====
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import io
 weekday_hebrew = {
     'Sunday': 'ראשון',
     'Monday': 'שני',
@@ -21,6 +24,26 @@ LAST_PLAYERS_FILE = "last_players.txt"
 MAX_PLAYERS = 8
 MIN_PLAYERS = 5
 ISRAEL_TZ = pytz.timezone("Asia/Jerusalem")
+
+# ===== פונקציות Google Sheets =====
+def get_sheets():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["GOOGLE_SHEETS_CREDENTIALS"]), scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("Poker Players")
+    return {
+        "current": sheet.worksheet("Current"),
+        "last": sheet.worksheet("Last")
+    }
+
+def sync_players_to_sheet(players, sheet_name):
+    sheets = get_sheets()
+    sheet = sheets[sheet_name]
+    sheet.clear()
+    sheet.append_row(["name", "timestamp"])
+    for name, ts in players:
+        sheet.append_row([name, ts])
+
 
 # ===== פונקציות מסד נתונים =====
 def init_db():
@@ -73,6 +96,7 @@ def reset_registered():
 
 # ===== ניהול תיעוד שחקנים =====
 def save_last_players(players):
+    sync_players_to_sheet(players, "last")
     with open(LAST_PLAYERS_FILE, "w") as f:
         for name, _ in players:
             f.write(name + "\n")
@@ -161,7 +185,7 @@ if registration_open:
     elif len(players) == 7:
         st.info("\u23F3 תמהר כי נשאר מקום אחרון!")
 
-st.subheader("👥 שחקנים רשומים:")
+st.subheader("\U0001F46E שחקנים רשומים:")
 if players:
     for i, (name, ts) in enumerate(players, start=1):
         if i <= 7:
@@ -210,6 +234,7 @@ if st.button("שלח"):
             else:
                 if register_player(name):
                     st.success(f"{name} נרשמת בהצלחה!")
+                    sync_players_to_sheet(get_registered_players(), "current")
                 else:
                     st.error("שגיאה בהרשמה.")
 
