@@ -1,13 +1,11 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import pytz
-import os
 import json
-
-# ===== הגדרות =====
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import io
+
+# ===== הגדרות =====
 weekday_hebrew = {
     'Sunday': 'ראשון',
     'Monday': 'שני',
@@ -17,37 +15,11 @@ weekday_hebrew = {
     'Friday': 'שישי',
     'Saturday': 'שבת'
 }
-DB_FILE = "players.db"
-LAST_RESET_FILE = "last_reset.txt"
-LAST_PLAYERS_FILE = "last_players.txt"
 MAX_PLAYERS = 8
 MIN_PLAYERS = 5
 ISRAEL_TZ = pytz.timezone("Asia/Jerusalem")
 
-# ===== פונקציות Google Sheets =====
-def get_registered_players():
-    sheet = get_sheets()["current"]
-    rows = sheet.get_all_values()[1:]  # דילוג על כותרת
-    return [(row[0], row[1]) for row in rows if len(row) >= 2]
-
-def register_player(name):
-    now_dt = datetime.now(ISRAEL_TZ)
-    timestamp = f"{weekday_hebrew[now_dt.strftime('%A')]} {now_dt.strftime('%H:%M')}"
-    players = get_registered_players()
-    players.append((name, timestamp))
-    sync_players_to_sheet(players, "current")
-    return True
-
-def reset_registered():
-    sync_players_to_sheet([], "current")
-
-def unregister_player(name):
-    players = get_registered_players()
-    updated = [p for p in players if p[0] != name]
-    sync_players_to_sheet(updated, "current")
-def log_reset_time(now):
-    sheets = get_sheets()
-    sheets["reset"].append_row([now.strftime("%Y-%m-%d %H:%M")])
+# ===== Google Sheets =====
 def get_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["GOOGLE_SHEETS_CREDENTIALS"]), scope)
@@ -59,6 +31,27 @@ def get_sheets():
         "reset": sheet.worksheet("ResetLog")
     }
 
+def get_registered_players():
+    sheet = get_sheets()["current"]
+    rows = sheet.get_all_values()[1:]
+    return [(row[0], row[1]) for row in rows if len(row) >= 2]
+
+def register_player(name):
+    now_dt = datetime.now(ISRAEL_TZ)
+    timestamp = f"{weekday_hebrew[now_dt.strftime('%A')]} {now_dt.strftime('%H:%M')}"
+    players = get_registered_players()
+    players.append((name, timestamp))
+    sync_players_to_sheet(players, "current")
+    return True
+
+def unregister_player(name):
+    players = get_registered_players()
+    updated = [p for p in players if p[0] != name]
+    sync_players_to_sheet(updated, "current")
+
+def reset_registered():
+    sync_players_to_sheet([], "current")
+
 def sync_players_to_sheet(players, sheet_name):
     sheets = get_sheets()
     sheet = sheets[sheet_name]
@@ -67,23 +60,31 @@ def sync_players_to_sheet(players, sheet_name):
     for name, ts in players:
         sheet.append_row([name, ts])
 
+def load_last_players_from_sheet():
+    sheet = get_sheets()["last"]
+    rows = sheet.get_all_values()[1:]
+    return [row[0] for row in rows if len(row) >= 1]
 
 def save_last_players(players):
     sync_players_to_sheet(players, "last")
-    with open(LAST_PLAYERS_FILE, "w") as f:
-        for name, _ in players:
-            f.write(name + "\n")
 
-def load_last_players():
-    if not os.path.exists(LAST_PLAYERS_FILE):
-        return []
-    with open(LAST_PLAYERS_FILE, "r") as f:
-        return [line.strip() for line in f]
+def log_reset_time(now):
+    sheets = get_sheets()
+    sheet = sheets["reset"]
+    sheet.append_row([now.strftime("%Y-%m-%d %H:%M")])
+    sheet.update_acell("B1", now.strftime("%Y-%m-%d %H:%M"))  # שמירה של האיפוס האחרון
 
-def get_priority_players(all_players, last_players):
-    return [p["name"] for p in all_players if p["name"] not in last_players]
+def get_last_reset_time():
+    sheet = get_sheets()["reset"]
+    try:
+        value = sheet.acell("B1").value
+        if value:
+            return datetime.strptime(value, "%Y-%m-%d %H:%M").replace(tzinfo=ISRAEL_TZ)
+    except:
+        pass
+    return None
 
-# ===== פונקציות עזר =====
+# ===== עזר =====
 def get_allowed_players():
     return json.loads(st.secrets["players"])
 
@@ -92,6 +93,9 @@ def get_player(name, all_players):
         if p["name"] == name:
             return p
     return None
+
+def get_priority_players(all_players, last_players):
+    return [p["name"] for p in all_players if p["name"] not in last_players]
 
 def is_registration_open(now):
     weekday = now.weekday()
@@ -105,25 +109,15 @@ def is_registration_open(now):
     return False
 
 def is_new_registration_period(now):
-    if not os.path.exists(LAST_RESET_FILE):
-        with open(LAST_RESET_FILE, "w") as f:
-            f.write(now.strftime("%Y-%m-%d %H:%M"))
+    last_reset = get_last_reset_time()
+    if not last_reset:
+        log_reset_time(now)
         return True
-    try:
-        with open(LAST_RESET_FILE, "r") as f:
-            last_reset_str = f.read().strip()
-            last_reset = datetime.strptime(last_reset_str, "%Y-%m-%d %H:%M")
-    except ValueError:
-        with open(LAST_RESET_FILE, "w") as f:
-            f.write(now.strftime("%Y-%m-%d %H:%M"))
-        return True
-    last_reset = last_reset.replace(tzinfo=now.tzinfo)
     this_friday = now.replace(hour=18, minute=0, second=0, microsecond=0)
     while this_friday.weekday() != 4:
         this_friday -= timedelta(days=1)
     if last_reset < this_friday <= now:
-        with open(LAST_RESET_FILE, "w") as f:
-            f.write(now.strftime("%Y-%m-%d %H:%M"))
+        log_reset_time(now)
         return True
     return False
 
@@ -138,7 +132,7 @@ if is_new_registration_period(now):
     save_last_players(players)
     reset_registered()
     players = []
-    priority_players = get_priority_players(all_players, load_last_players())
+    priority_players = get_priority_players(all_players, load_last_players_from_sheet())
     for p_name in priority_players:
         if len(players) < MAX_PLAYERS:
             now_dt = datetime.now(ISRAEL_TZ)
@@ -172,7 +166,7 @@ if registration_open:
 else:
     st.markdown("<div style='background-color:#f8d7da;padding:10px;border-radius:5px;color:#721c24;'>\u274C ההרשמה סגורה כרגע.</div>", unsafe_allow_html=True)
 
-priority_players = get_priority_players(all_players, load_last_players())
+priority_players = get_priority_players(all_players, load_last_players_from_sheet())
 if registration_open and priority_players:
     st.markdown("\U0001F3AF <b>שחקנים שפספסו בפעם הקודמת:</b>", unsafe_allow_html=True)
     for p in priority_players:
@@ -206,7 +200,6 @@ if st.button("שלח"):
             else:
                 if register_player(name):
                     st.success(f"{name} נרשמת בהצלחה!")
-                    sync_players_to_sheet(get_registered_players(), "current")
                 else:
                     st.error("שגיאה בהרשמה.")
 
