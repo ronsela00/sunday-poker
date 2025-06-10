@@ -25,6 +25,26 @@ MIN_PLAYERS = 5
 ISRAEL_TZ = pytz.timezone("Asia/Jerusalem")
 
 # ===== פונקציות Google Sheets =====
+def get_registered_players():
+    sheet = get_sheets()["current"]
+    rows = sheet.get_all_values()[1:]  # דילוג על כותרת
+    return [(row[0], row[1]) for row in rows if len(row) >= 2]
+
+def register_player(name):
+    now_dt = datetime.now(ISRAEL_TZ)
+    timestamp = f"{weekday_hebrew[now_dt.strftime('%A')]} {now_dt.strftime('%H:%M')}"
+    players = get_registered_players()
+    players.append((name, timestamp))
+    sync_players_to_sheet(players, "current")
+    return True
+
+def reset_registered():
+    sync_players_to_sheet([], "current")
+
+def unregister_player(name):
+    players = get_registered_players()
+    updated = [p for p in players if p[0] != name]
+    sync_players_to_sheet(updated, "current")
 def log_reset_time(now):
     sheets = get_sheets()
     sheets["reset"].append_row([now.strftime("%Y-%m-%d %H:%M")])
@@ -110,7 +130,7 @@ def is_new_registration_period(now):
 # ===== התחלה =====
 now = datetime.now(ISRAEL_TZ)
 all_players = get_allowed_players()
-players = []  # יתעדכן מתוך Google Sheets
+players = get_registered_players()
 registration_open = is_registration_open(now)
 
 if is_new_registration_period(now):
@@ -121,7 +141,9 @@ if is_new_registration_period(now):
     priority_players = get_priority_players(all_players, load_last_players())
     for p_name in priority_players:
         if len(players) < MAX_PLAYERS:
-            players.append((p_name, hebrew_ts))
+            now_dt = datetime.now(ISRAEL_TZ)
+            hebrew_ts = f"{weekday_hebrew[now_dt.strftime('%A')]} {now_dt.strftime('%H:%M')}"
+            register_player(p_name)
 
 # ===== ממשק =====
 st.title("\U0001F0CF\U0001F4B0 טורניר הפוקר השבועי")
@@ -196,5 +218,5 @@ if st.button("שלח"):
             elif not is_registered:
                 st.info("אתה לא רשום כרגע.")
             else:
-                # מחיקת שחקן תיעשה רק בגיליון בעתיד (לא כרגע)
+                unregister_player(name)
                 st.success("הוסרת מהרשימה.")
