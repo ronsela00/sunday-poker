@@ -52,7 +52,7 @@ def get_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["GOOGLE_SHEETS_CREDENTIALS"]), scope)
     client = gspread.authorize(creds)
-    sheet = client.open_by_key("1J-3iWuq9U5F7gKTXoXwF13owZ9uFf0xWBbvwFRN9jHo")
+    sheet = client.open_by_key("1Si8leXEZH7_bXFzDbN7gwWgBEpZ__TQ_nSlO67bGYkA")
     return {
         "current": sheet.worksheet("Current"),
         "last": sheet.worksheet("Last"),
